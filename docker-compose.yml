@@ -1,0 +1,105 @@
+services:
+  postgres_db:
+    image: postgres:15-alpine
+    container_name: resilience_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER:-resilience_admin}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-super_secure_password_change_me}
+      POSTGRES_DB: ${DB_NAME:-payment_si}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - resilience_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-resilience_admin} -d ${DB_NAME:-payment_si}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  auth_service:
+    build:
+      context: ./services/auth-service
+      dockerfile: Dockerfile
+    container_name: resilience_auth
+    restart: always
+    environment:
+      - PORT=8001
+    ports:
+      - "8001:8001"
+    networks:
+      - resilience_net
+
+  payment_service:
+    build:
+      context: ./services/payment-service
+      dockerfile: Dockerfile
+    container_name: resilience_payment
+    restart: always
+    environment:
+      - DB_HOST=resilience_db
+      - DB_PORT=5432
+      - DB_USER=resilience_admin
+      - DB_PASSWORD=super_secure_password_change_me
+      - DB_NAME=payment_si
+      - PORT=8002
+    ports:
+      - "8002:8002"
+    depends_on:
+      postgres_db:
+        condition: service_healthy
+    networks:
+      - resilience_net
+
+  remediation_service:
+    build:
+      context: ./services/remediation-service
+      dockerfile: Dockerfile
+    container_name: resilience_remediation
+    restart: always
+    ports:
+      - "8003:8003"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - resilience_net
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: resilience_prometheus
+    restart: always
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - resilience_net
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: resilience_grafana
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=resilience_password
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - resilience_net
+    depends_on:
+      - prometheus
+
+volumes:
+  postgres_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  resilience_net:
+    driver: bridge
