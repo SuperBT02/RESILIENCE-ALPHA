@@ -1,0 +1,22 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  # Application services expose /metrics via prometheus-fastapi-instrumentator.
+  - job_name: 'auth_service'
+    static_configs:
+      - targets: ['resilience_auth:8001']
+
+  - job_name: 'payment_service'
+    static_configs:
+      - targets: ['resilience_payment:8002']
+
+  # Container CPU / memory, used by the ML engine.
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['resilience_cadvisor:8080']
+
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']

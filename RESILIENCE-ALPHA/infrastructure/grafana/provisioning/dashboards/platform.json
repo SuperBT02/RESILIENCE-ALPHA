@@ -1,0 +1,39 @@
+{
+  "title": "Platform Health",
+  "uid": "resilience-platform",
+  "tags": ["resilience-alpha"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "5s",
+  "time": { "from": "now-15m", "to": "now" },
+  "panels": [
+    {
+      "type": "timeseries", "title": "Requests per second", "id": 1,
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 0 },
+      "targets": [{ "expr": "sum(rate(http_requests_total[30s]))", "datasource": "Prometheus" }]
+    },
+    {
+      "type": "timeseries", "title": "Errors 4xx / 5xx", "id": 2,
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "sum(rate(http_requests_total{status=~\"4..\"}[30s]))", "legendFormat": "4xx", "datasource": "Prometheus" },
+        { "expr": "sum(rate(http_requests_total{status=~\"5..\"}[30s]))", "legendFormat": "5xx", "datasource": "Prometheus" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Latency p95 (s)", "id": 3,
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 7 },
+      "targets": [{ "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[30s])))", "datasource": "Prometheus" }]
+    },
+    {
+      "type": "logs", "title": "Auth events (brute force)", "id": 4,
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 7 },
+      "targets": [{ "expr": "{service=\"auth\"} |= \"LOGIN_FAILED\"", "datasource": "Loki" }]
+    },
+    {
+      "type": "logs", "title": "Remediation events", "id": 5,
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 14 },
+      "targets": [{ "expr": "{service=\"remediation\"}", "datasource": "Loki" }]
+    }
+  ]
+}
