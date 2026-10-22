@@ -1,10 +1,31 @@
 import os
 import psycopg2
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, Request, status
 from pydantic import BaseModel
+from prometheus_client import Counter
 from prometheus_fastapi_instrumentator import Instrumentator
 
 app = FastAPI(title="Resilience-Alpha Payment API", version="1.0.0")
+
+SOURCE_REQUEST_COUNTER = Counter(
+    "payment_requests_by_source_ip_total",
+    "Payment service requests grouped by source IP",
+    ["source_ip"],
+)
+
+
+def client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for")
+    return forwarded.split(",")[0].strip() if forwarded else (request.client.host if request.client else "unknown")
+
+
+@app.middleware("http")
+async def record_source_request(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path != "/metrics":
+        SOURCE_REQUEST_COUNTER.labels(source_ip=client_ip(request)).inc()
+    return response
+
 
 # Initialize Prometheus Metrics Instrumentation
 Instrumentator().instrument(app).expose(app, endpoint="/metrics")

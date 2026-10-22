@@ -38,6 +38,9 @@ PC Attaquant ──attaques──┐
 - PostgreSQL avec identifiants **UUID** ; tables `users`, `transactions`, `audit_logs`.
 - Microservices FastAPI (`auth-service`, `payment-service`, `remediation-service`).
 - Détection par **Isolation Forest** entraîné sur un baseline de trafic normal (pas de seuil fixe).
+- Les services exposent des compteurs Prometheus par IP source ; le moteur ML
+  sélectionne l'IP dominante des échecs d'authentification ou des requêtes de
+  paiement et la transmet au playbook de blocage WAF.
 - Remédiation **déterministe** ; aucun LLM dans la boucle critique.
 
 ## Piste de durcissement

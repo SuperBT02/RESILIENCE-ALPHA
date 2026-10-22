@@ -16,18 +16,20 @@ server {
     location = /_admin/reload {
         allow 172.16.0.0/12;
         deny all;
-        content_by_lua_block { os.execute("nginx -s reload") }
+        return 204;
     }
 
     location /auth/ {
         limit_req zone=login burst=10 nodelay;
         proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Real-IP $remote_addr;
         proxy_pass ${BACKEND_AUTH}/;
     }
 
     location /api/ {
         limit_req zone=pay burst=40 nodelay;
         proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Real-IP $remote_addr;
         proxy_pass ${BACKEND_PAYMENT}/api/;
     }
 

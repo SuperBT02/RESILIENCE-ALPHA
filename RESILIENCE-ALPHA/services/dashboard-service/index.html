@@ -3,55 +3,156 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>RESILIENCE-ALPHA — Supervision</title>
+<title>Resilience Alpha — Live Operations</title>
 <style>
-  :root { --bg:#15122A; --panel:#1E1A38; --line:#36305E; --muted:#A7A3C8; }
-  * { box-sizing:border-box; font-family:system-ui,Segoe UI,sans-serif; }
-  body { margin:0; background:var(--bg); color:#ECEBF8; padding:24px; }
-  h1 { font-size:18px; letter-spacing:.04em; color:var(--muted); text-transform:uppercase; margin:0 0 16px; }
-  .banner { border-radius:16px; padding:34px; text-align:center; transition:background .3s; }
-  .banner h2 { font-size:38px; margin:0; } .banner p { font-size:16px; margin:8px 0 0; opacity:.9; }
-  .state-ok { background:linear-gradient(135deg,#1f8a4c,#2ecc71); }
-  .state-attack { background:linear-gradient(135deg,#a33027,#e74c3c); }
-  .state-fix { background:linear-gradient(135deg,#9a6410,#f39c12); }
-  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; margin-top:18px; }
-  .tile { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px; }
-  .tile .k { font-size:12px; color:var(--muted); text-transform:uppercase; }
-  .tile .v { font-size:28px; font-weight:700; margin-top:6px; }
-  .steps { margin-top:18px; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px; }
-  .step { display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--line); font-size:14px; }
+  :root {
+    --bg:#08111f; --panel:#101d2d; --panel-2:#14253a; --line:#21364d;
+    --text:#e9f1f8; --muted:#8499ad; --cyan:#54d6e8; --green:#4ed18b;
+    --amber:#f7b955; --red:#ff6b78; --shadow:0 18px 50px #0005;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; color:var(--text); background:
+    radial-gradient(circle at 80% -20%,#163a55 0,transparent 36%),var(--bg);
+    font:14px Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
+  .shell { width:min(1440px,calc(100% - 42px)); margin:0 auto; padding:28px 0 42px; }
+  .topbar { display:flex; align-items:center; justify-content:space-between; gap:20px; margin-bottom:24px; }
+  .brand { display:flex; align-items:center; gap:13px; }
+  .mark { width:39px; height:39px; display:grid; place-items:center; border:1px solid #3c7185;
+    border-radius:12px; color:var(--cyan); background:#123143; font-weight:800; }
+  .eyebrow { color:var(--cyan); font-size:11px; letter-spacing:.16em; text-transform:uppercase; font-weight:800; }
+  h1 { margin:3px 0 0; font-size:23px; letter-spacing:-.03em; }
+  .top-meta { color:var(--muted); display:flex; align-items:center; gap:12px; font-size:12px; }
+  .live-dot { width:8px; height:8px; border-radius:50%; background:var(--green); box-shadow:0 0 0 5px #4ed18b22; }
+  .hero { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:25px 28px;
+    border:1px solid var(--line); border-radius:18px; background:linear-gradient(110deg,#102a3a,#122238 70%);
+    box-shadow:var(--shadow); }
+  .hero.alert { background:linear-gradient(110deg,#3a202a,#201d2d 70%); }
+  .hero.fix { background:linear-gradient(110deg,#3d301e,#1b2430 70%); }
+  .hero-copy { display:flex; align-items:center; gap:18px; }
+  .hero-icon { width:53px; height:53px; display:grid; place-items:center; border-radius:16px; color:var(--green);
+    background:#4ed18b18; font-size:25px; }
+  .hero.alert .hero-icon { color:var(--red); background:#ff6b7818; }
+  .hero.fix .hero-icon { color:var(--amber); background:#f7b95518; }
+  .hero h2 { margin:0 0 5px; font-size:25px; letter-spacing:-.03em; }
+  .hero p { margin:0; color:#b5c5d2; }
+  .hero-time { text-align:right; color:var(--muted); font-size:12px; }
+  .hero-time strong { display:block; color:var(--text); font-size:26px; margin-top:3px; }
+  .grid { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-top:16px; }
+  .card { border:1px solid var(--line); border-radius:15px; background:var(--panel); padding:18px; box-shadow:0 9px 28px #0002; }
+  .metric { min-height:142px; position:relative; overflow:hidden; }
+  .label { color:var(--muted); text-transform:uppercase; letter-spacing:.1em; font-size:10px; font-weight:800; }
+  .metric-value { font-size:28px; font-weight:750; margin-top:13px; letter-spacing:-.04em; }
+  .metric-note { color:var(--muted); font-size:12px; margin-top:6px; }
+  .metric.ok .metric-value { color:var(--green); } .metric.bad .metric-value { color:var(--red); }
+  .spark { position:absolute; right:10px; bottom:12px; width:112px; height:36px; opacity:.8; }
+  .content { display:grid; grid-template-columns:1.35fr .9fr; gap:16px; margin-top:16px; }
+  .section-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+  .section-title { font-size:15px; font-weight:750; } .section-meta { color:var(--muted); font-size:12px; }
+  .flow { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+  .flow-step { position:relative; padding:14px 10px; border:1px solid var(--line); border-radius:11px; background:var(--panel-2); }
+  .flow-step:not(:last-child)::after { content:"→"; position:absolute; right:-13px; top:14px; color:#58758d; z-index:1; }
+  .flow-step.done { border-color:#337e68; } .flow-step.current { border-color:var(--amber); background:#30291d; }
+  .flow-step .num { color:var(--cyan); font-size:10px; font-weight:800; } .flow-step strong { display:block; margin-top:8px; font-size:12px; }
+  .flow-step span { display:block; color:var(--muted); font-size:11px; margin-top:4px; }
+  .incident { min-height:194px; }
+  .incident-main { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+  .badge { border-radius:99px; padding:5px 9px; font-size:10px; font-weight:800; text-transform:uppercase; background:#294052; color:#b8d3e0; }
+  .badge.ok { background:#174936; color:#72e1a5; } .badge.warn { background:#57451f; color:#ffd17b; }
+  .incident-type { font-size:20px; font-weight:750; text-transform:capitalize; margin-top:10px; }
+  .source { color:var(--muted); margin-top:5px; font-family:ui-monospace,Consolas,monospace; font-size:12px; }
+  .actions { margin-top:18px; display:grid; gap:7px; } .action { display:flex; justify-content:space-between; color:#b8c8d4;
+    padding:8px 10px; border-radius:8px; background:#0b1725; font-size:12px; } .action b { color:var(--green); }
+  .components { display:grid; gap:9px; } .component { display:flex; justify-content:space-between; align-items:center;
+    padding:12px 13px; border:1px solid var(--line); border-radius:10px; background:var(--panel-2); }
+  .component-left { display:flex; align-items:center; gap:10px; } .component-icon { color:var(--cyan); }
+  .component small { display:block; color:var(--muted); margin-top:2px; } .status { width:8px; height:8px; border-radius:50%; background:var(--red); }
+  .status.up { background:var(--green); box-shadow:0 0 0 4px #4ed18b18; }
+  .history { margin-top:16px; } .history-row { display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:10px;
+    padding:12px 0; border-bottom:1px solid var(--line); color:#b9c9d5; font-size:12px; } .history-row:last-child { border:0; }
+  .history-row span:first-child { color:var(--text); font-weight:700; } .empty { color:var(--muted); padding:15px 0; }
+  @media (max-width:900px) { .grid{grid-template-columns:repeat(2,1fr)} .content{grid-template-columns:1fr} }
+  @media (max-width:600px) { .shell{width:min(100% - 24px,1440px);padding-top:18px} .topbar,.hero{align-items:flex-start;flex-direction:column}
+    .hero-time{text-align:left} .grid{grid-template-columns:1fr 1fr;gap:9px} .card{padding:14px} .flow{grid-template-columns:1fr 1fr}
+    .flow-step:not(:last-child)::after{display:none} .history-row{grid-template-columns:1fr 1fr} }
 </style>
 </head>
 <body>
-  <h1>PROJECT RESILIENCE-ALPHA — live supervision</h1>
-  <div class="banner state-ok" id="banner">
-    <h2 id="title">Service operational</h2>
-    <p id="subtitle">Waiting for data…</p>
-  </div>
-  <div class="grid">
-    <div class="tile"><div class="k">Test transaction</div><div class="v" id="tx">—</div></div>
-    <div class="tile"><div class="k">Last incident</div><div class="v" id="itype" style="font-size:20px">—</div></div>
-    <div class="tile"><div class="k">Recovery time</div><div class="v" id="rec">—</div></div>
-  </div>
-  <div class="steps"><div id="timeline"><div class="step"><span>No incident yet.</span></div></div></div>
+<main class="shell">
+  <header class="topbar">
+    <div class="brand"><div class="mark">RA</div><div><div class="eyebrow">Operations center</div><h1>Resilience Alpha</h1></div></div>
+    <div class="top-meta"><span class="live-dot"></span><span>LIVE MONITORING</span><span id="updated">Connexion…</span></div>
+  </header>
+  <section class="hero" id="hero">
+    <div class="hero-copy"><div class="hero-icon" id="heroIcon">✓</div><div><h2 id="title">Connexion au système…</h2><p id="subtitle">Récupération des signaux de supervision</p></div></div>
+    <div class="hero-time">Dernier contrôle<strong id="poll">—</strong></div>
+  </section>
+  <section class="grid">
+    <article class="card metric" id="txCard"><div class="label">Transaction de preuve</div><div class="metric-value" id="tx">—</div><div class="metric-note" id="latency">Latence —</div><canvas class="spark" id="spark"></canvas></article>
+    <article class="card metric"><div class="label">Incident actif</div><div class="metric-value" id="itype">Aucun</div><div class="metric-note" id="incidentStatus">Système nominal</div></article>
+    <article class="card metric"><div class="label">Temps de récupération</div><div class="metric-value" id="rec">—</div><div class="metric-note">Dernier incident traité</div></article>
+    <article class="card metric"><div class="label">Source observée</div><div class="metric-value" id="source" style="font-size:19px">—</div><div class="metric-note">IP transmise au playbook</div></article>
+  </section>
+  <section class="content">
+    <article class="card"><div class="section-head"><div class="section-title">Chaîne de résilience</div><div class="section-meta" id="flowMeta">En attente</div></div>
+      <div class="flow"><div class="flow-step done" id="flowAttack"><div class="num">01</div><strong>Détection</strong><span id="flowAttackText">Surveillance active</span></div>
+      <div class="flow-step" id="flowMl"><div class="num">02</div><strong>Analyse ML</strong><span id="flowMlText">Isolation Forest</span></div>
+      <div class="flow-step" id="flowFix"><div class="num">03</div><strong>Remédiation</strong><span id="flowFixText">En attente d’incident</span></div>
+      <div class="flow-step" id="flowProof"><div class="num">04</div><strong>Preuve</strong><span id="flowProofText">Transaction validée</span></div></div>
+    </article>
+    <article class="card incident"><div class="section-head"><div class="section-title">Dernier incident</div><div class="section-meta" id="incidentId">—</div></div>
+      <div class="incident-main"><div><div class="incident-type" id="detailType">Aucun incident</div><div class="source" id="detailSource">La plateforme n’a pas signalé d’incident.</div></div><span class="badge ok" id="badge">Nominal</span></div>
+      <div class="actions" id="actions"><div class="action"><span>En attente d’événements</span><b>—</b></div></div></article>
+  </section>
+  <section class="content">
+    <article class="card history"><div class="section-head"><div class="section-title">Historique récent</div><div class="section-meta">Derniers événements</div></div><div id="history"><div class="empty">Aucun incident enregistré.</div></div></article>
+    <article class="card"><div class="section-head"><div class="section-title">État des composants</div><div class="section-meta" id="componentCount">—</div></div><div class="components" id="components"></div></article>
+  </section>
+</main>
 <script>
-async function tick() {
-  let s; try { s = await (await fetch("/api/state")).json(); } catch (e) { return; }
-  const banner = document.getElementById("banner"), title = document.getElementById("title"), sub = document.getElementById("subtitle");
-  const inc = s.incident, active = inc && inc.status === "in_progress", recovered = inc && inc.status === "recovered";
-  if (active) { banner.className = "banner state-fix"; title.textContent = "Remediation in progress…"; sub.textContent = "Incident: " + (inc.type||"?"); }
-  else if (inc && inc.status === "detected") { banner.className = "banner state-attack"; title.textContent = "Attack detected: " + (inc.type||"?"); sub.textContent = "Source: " + (inc.source_ip||"?"); }
-  else if (s.payment_ok) { banner.className = "banner state-ok"; title.textContent = "Service operational"; sub.textContent = recovered ? "Recovered — transaction verified" : "Nominal transactions"; }
-  else { banner.className = "banner state-attack"; title.textContent = "Service degraded"; sub.textContent = "Test transaction failing"; }
-  document.getElementById("tx").textContent = s.payment_ok ? "success" : "failed";
-  document.getElementById("tx").style.color = s.payment_ok ? "#2ecc71" : "#e74c3c";
-  document.getElementById("itype").textContent = inc ? (inc.type||"—") : "—";
-  document.getElementById("rec").textContent = inc && inc.duration_ms ? (inc.duration_ms/1000).toFixed(1)+" s" : "—";
-  const tl = document.getElementById("timeline");
-  if (inc && inc.actions && inc.actions.length)
-    tl.innerHTML = inc.actions.map(a => `<div class="step"><span>${a.action}</span><span>${a.status}</span></div>`).join("");
+const $ = id => document.getElementById(id);
+const history = [], latencyPoints = [];
+const names = { dashboard:["Dashboard","Interface de supervision"], auth:["Auth service","Authentification"], payment:["Payment service","Transactions"], remediation:["Remediation","Moteur de récupération"] };
+function setText(id, value) { $(id).textContent = value; }
+function timeSince(ts) { if (!ts) return "—"; return new Date(ts * 1000).toLocaleTimeString("fr-FR"); }
+function drawSpark() {
+  const canvas=$("spark"), ctx=canvas.getContext("2d"), w=canvas.width=112*devicePixelRatio, h=canvas.height=36*devicePixelRatio;
+  ctx.clearRect(0,0,w,h); if (latencyPoints.length<2) return; ctx.strokeStyle="#54d6e8"; ctx.lineWidth=2*devicePixelRatio; ctx.beginPath();
+  latencyPoints.forEach((v,i)=>{const x=i/(latencyPoints.length-1)*w,y=h-Math.min(v,300)/300*h*.9-h*.05;i?ctx.lineTo(x,y):ctx.moveTo(x,y)}); ctx.stroke();
 }
-setInterval(tick, 2000); tick();
+function renderComponents(components) {
+  const entries=Object.entries(components||{}), up=entries.filter(([,v])=>v).length; setText("componentCount",`${up}/${entries.length} opérationnels`);
+  $("components").innerHTML=entries.map(([key,ok])=>`<div class="component"><div class="component-left"><span class="status ${ok?"up":""}"></span><div><b>${names[key]?.[0]||key}</b><small>${names[key]?.[1]||"Service"}</small></div></div><span>${ok?"OPÉRATIONNEL":"INDISPONIBLE"}</span></div>`).join("");
+}
+function renderIncident(inc) {
+  const active=inc?.status==="in_progress", recovered=inc?.status==="recovered";
+  setText("itype",inc?.type||"Aucun"); setText("incidentStatus",inc?inc.status.replace("_"," "):"Système nominal");
+  setText("rec",inc?.duration_ms?`${(inc.duration_ms/1000).toFixed(1)} s`:"—"); setText("source",inc?.source_ip||"—");
+  setText("detailType",inc?.type||"Aucun incident"); setText("detailSource",inc?`Source : ${inc.source_ip||"inconnue"}`:"La plateforme n’a pas signalé d’incident."); setText("incidentId",inc?.incident_id||"—");
+  $("badge").textContent=active?"En cours":recovered?"Récupéré":"Nominal"; $("badge").className=`badge ${active?"warn":"ok"}`;
+  $("actions").innerHTML=inc?.actions?.length?inc.actions.map(a=>`<div class="action"><span>${a.action.replaceAll("_"," ")}</span><b>${a.status}</b></div>`).join(""):`<div class="action"><span>En attente d’événements</span><b>—</b></div>`;
+  $("flowMl").classList.toggle("current", !!inc && !recovered);
+  $("flowFix").classList.toggle("current", active);
+  $("flowProof").classList.toggle("done", recovered);
+  $("flowAttackText").textContent=inc ? "Anomalie signalée" : "Surveillance active";
+  $("flowMlText").textContent=inc ? "Anomalie qualifiée" : "Isolation Forest en veille";
+  $("flowFixText").textContent=active ? "Playbook en exécution" : recovered ? "Actions terminées" : "En attente d’incident";
+  $("flowProofText").textContent=recovered ? "Transaction confirmée" : "Validation après remédiation";
+  $("flowMeta").textContent=active?"Remédiation en cours":recovered?"Récupération confirmée":"Surveillance nominale";
+}
+function renderHistory(items) {
+  $("history").innerHTML=items?.length?items.slice().reverse().slice(0,6).map(i=>`<div class="history-row"><span>${i.type||"anomaly"}</span><span>${i.source_ip||"unknown"}</span><span>${i.status||"—"}</span><span>${i.duration_ms?`${(i.duration_ms/1000).toFixed(1)} s`:"—"}</span></div>`).join(""):`<div class="empty">Aucun incident enregistré.</div>`;
+}
+async function tick() {
+  try {
+    const response=await fetch("/api/state",{cache:"no-store"}), s=await response.json(), inc=s.incident, active=inc?.status==="in_progress", recovered=inc?.status==="recovered";
+    $("hero").className=`hero ${active?"fix":inc&&!recovered?"alert":""}`; setText("title",active?"Remédiation en cours":inc&&!recovered?`Incident détecté : ${inc.type||"anomalie"}`:s.payment_ok?"Plateforme opérationnelle":"Service dégradé");
+    setText("subtitle",active?"Le playbook automatique exécute ses actions…":recovered?"Récupération confirmée par transaction":s.payment_ok?"Transactions nominales":"La transaction de preuve échoue");
+    setText("heroIcon",active?"↻":inc&&!recovered?"!":"✓"); setText("tx",s.payment_ok?"SUCCÈS":"ÉCHEC"); $("txCard").className=`card metric ${s.payment_ok?"ok":"bad"}`;
+    setText("latency",`Latence ${s.payment_latency_ms??"—"} ms`); latencyPoints.push(s.payment_latency_ms||0); if(latencyPoints.length>24)latencyPoints.shift(); drawSpark(); setText("poll",`${s.poll_latency_ms??"—"} ms`);
+    setText("updated",`Mis à jour ${timeSince(s.ts)}`); renderIncident(inc); renderHistory(s.incidents); renderComponents(s.components);
+  } catch(e) { $("hero").className="hero alert"; setText("title","Supervision indisponible"); setText("subtitle","Impossible de joindre le dashboard backend"); }
+}
+setInterval(tick,3000); tick();
 </script>
 </body>
 </html>

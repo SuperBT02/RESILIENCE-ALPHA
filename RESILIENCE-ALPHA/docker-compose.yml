@@ -81,11 +81,23 @@ services:
       - PAYMENT_URL=http://resilience_payment:8002
       - PAYMENT_CONTAINER=resilience_payment
       - AUTH_CONTAINER=resilience_auth
+      - WAF_CONTAINER=resilience_waf
       - WAF_BLOCKLIST_PATH=/shared/blocklist.conf
+      - INCIDENTS_PATH=/data/incidents.json
     ports:
       - "8003:8003"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - waf_shared:/shared
+      - remediation_data:/data
+    networks:
+      - resilience_net
+
+  waf_blocklist_init:
+    image: alpine:3.20
+    container_name: resilience_waf_blocklist_init
+    command: ["sh", "-c", "mkdir -p /shared && touch /shared/blocklist.conf"]
+    volumes:
       - waf_shared:/shared
     networks:
       - resilience_net
@@ -150,9 +162,14 @@ services:
     container_name: resilience_waf
     restart: always
     depends_on:
-      - auth_service
-      - payment_service
-      - frontend_service
+      auth_service:
+        condition: service_started
+      payment_service:
+        condition: service_started
+      frontend_service:
+        condition: service_started
+      waf_blocklist_init:
+        condition: service_completed_successfully
     environment:
       BACKEND_AUTH: "http://resilience_auth:8001"
       BACKEND_PAYMENT: "http://resilience_payment:8002"
@@ -236,6 +253,7 @@ volumes:
   prometheus_data:
   grafana_data:
   waf_shared:
+  remediation_data:
 
 networks:
   resilience_net:

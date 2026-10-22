@@ -6,9 +6,16 @@ import jwt
 import psycopg2
 from fastapi import FastAPI, Request, HTTPException, status
 from pydantic import BaseModel
+from prometheus_client import Counter
 from prometheus_fastapi_instrumentator import Instrumentator
 
 app = FastAPI(title="Resilience-Alpha Auth Service", version="1.0.0")
+
+FAILED_LOGIN_COUNTER = Counter(
+    "auth_login_failures_total",
+    "Failed login attempts grouped by source IP",
+    ["source_ip"],
+)
 
 # Prometheus metrics: /metrics exposes http_requests_total (status codes let the
 # ML engine see a spike of 401s during a brute-force attack).
@@ -60,9 +67,13 @@ def login(body: LoginRequest, request: Request):
     try:
         cur.execute("SELECT id, password_hash FROM users WHERE username = %s", (body.username,))
         row = cur.fetchone()
-        ok = bool(row) and bcrypt.checkpw(body.password.encode(), row[1].encode())
+        try:
+            ok = bool(row) and bcrypt.checkpw(body.password.encode(), row[1].encode())
+        except ValueError:
+            ok = False
         if not ok:
             # IMPORTANT: this log line and the 401 status are the brute-force signal.
+            FAILED_LOGIN_COUNTER.labels(source_ip=ip).inc()
             print(f'{{"event":"LOGIN_FAILED","username":"{body.username}","source_ip":"{ip}"}}')
             _audit(cur, conn, "LOGIN_FAILED", ip, {"username": body.username})
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")

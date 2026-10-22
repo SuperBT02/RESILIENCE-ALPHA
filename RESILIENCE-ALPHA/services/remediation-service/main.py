@@ -1,5 +1,7 @@
 import os
 import time
+import ipaddress
+import json
 
 import docker
 import requests
@@ -18,11 +20,34 @@ except Exception as e:
 PAYMENT_URL = os.getenv("PAYMENT_URL", "http://resilience_payment:8002")
 PAYMENT_CONTAINER = os.getenv("PAYMENT_CONTAINER", "resilience_payment")
 AUTH_CONTAINER = os.getenv("AUTH_CONTAINER", "resilience_auth")
+WAF_CONTAINER = os.getenv("WAF_CONTAINER", "resilience_waf")
 BLOCKLIST_PATH = os.getenv("WAF_BLOCKLIST_PATH", "/shared/blocklist.conf")
 WAF_RELOAD_URL = os.getenv("WAF_RELOAD_URL", "http://resilience_waf:8080/_admin/reload")
+INCIDENTS_PATH = os.getenv("INCIDENTS_PATH", "/data/incidents.json")
 
-# In-memory history of incidents, exposed for the dashboard.
-INCIDENTS: list[dict] = []
+
+def load_incidents() -> list[dict]:
+    try:
+        with open(INCIDENTS_PATH, encoding="utf-8") as history_file:
+            incidents = json.load(history_file)
+        return incidents if isinstance(incidents, list) else []
+    except FileNotFoundError:
+        return []
+    except (OSError, json.JSONDecodeError) as e:
+        print(f"incident_history_load_error: {e}")
+        return []
+
+
+INCIDENTS: list[dict] = load_incidents()
+
+
+def save_incidents() -> None:
+    try:
+        os.makedirs(os.path.dirname(INCIDENTS_PATH), exist_ok=True)
+        with open(INCIDENTS_PATH, "w", encoding="utf-8") as history_file:
+            json.dump(INCIDENTS[-100:], history_file)
+    except OSError as e:
+        print(f"incident_history_save_error: {e}")
 
 # Decision table: incident type -> ordered list of actions.
 PLAYBOOKS = {
@@ -61,6 +86,10 @@ def block_ip(source_ip: str):
     if not source_ip or source_ip == "unknown":
         return "skipped", "source IP unknown"
     try:
+        ipaddress.ip_address(source_ip)
+    except ValueError:
+        return "failed", f"invalid source IP: {source_ip}"
+    try:
         existing = ""
         if os.path.exists(BLOCKLIST_PATH):
             existing = open(BLOCKLIST_PATH).read()
@@ -68,7 +97,10 @@ def block_ip(source_ip: str):
             with open(BLOCKLIST_PATH, "a") as f:
                 f.write(f"deny {source_ip};\n")
         try:
-            requests.post(WAF_RELOAD_URL, timeout=3)
+            if client:
+                client.containers.get(WAF_CONTAINER).exec_run(["nginx", "-s", "reload"])
+            else:
+                requests.post(WAF_RELOAD_URL, timeout=3)
         except Exception:
             pass
         return "ok", f"blocked {source_ip} at WAF"
@@ -145,6 +177,7 @@ def trigger_remediation(payload: RemediationRequest):
         "duration_ms": None,
     }
     INCIDENTS.append(incident)
+    save_incidents()
     incident["status"] = "in_progress"
 
     plan = PLAYBOOKS.get(payload.type, PLAYBOOKS["anomaly"])
@@ -154,12 +187,15 @@ def trigger_remediation(payload: RemediationRequest):
         incident["actions"].append(
             {"action": action, "status": st, "detail": detail, "duration_ms": int((time.time() - t0) * 1000)}
         )
+        save_incidents()
         print(f"  action {action}: {st} ({detail})")
         if wait_healthy() and test_payment_ok():
             incident["status"] = "recovered"
             incident["duration_ms"] = int((time.time() - started) * 1000)
+            save_incidents()
             return {"status": "SUCCESS", "incident": incident}
 
     incident["status"] = "failed"
     incident["duration_ms"] = int((time.time() - started) * 1000)
+    save_incidents()
     raise HTTPException(status_code=500, detail="Remediation did not restore service")

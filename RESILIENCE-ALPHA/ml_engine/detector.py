@@ -36,6 +36,23 @@ def fetch(query: str) -> float:
     return 0.0
 
 
+def fetch_source_ip(window: str) -> str:
+    """Return the most active source IP for the signal that drove the incident."""
+    queries = (
+        f'topk(1, sum by (source_ip) (rate(auth_login_failures_total[{window}])))',
+        f'topk(1, sum by (source_ip) (rate(payment_requests_by_source_ip_total[{window}])))',
+    )
+    for query in queries:
+        try:
+            r = requests.get(PROMETHEUS_URL, params={"query": query}, timeout=3)
+            result = r.json().get("data", {}).get("result", [])
+            if result and result[0].get("metric", {}).get("source_ip"):
+                return result[0]["metric"]["source_ip"]
+        except (requests.RequestException, ValueError, KeyError, IndexError) as e:
+            print(f"Error reading source IP from Prometheus: {e}")
+    return "unknown"
+
+
 def read_window():
     w = f"{WINDOW}s"
     return {
@@ -91,12 +108,13 @@ def run_anomaly_detector():
 
 def trigger_remediation(itype: str, score: float):
     try:
+        source_ip = fetch_source_ip(f"{WINDOW}s")
         r = requests.post(
             REMEDIATION_WEBHOOK,
-            json={"reason": "ML_ANOMALY_DETECTED", "type": itype, "source_ip": "unknown"},
+            json={"reason": "ML_ANOMALY_DETECTED", "type": itype, "source_ip": source_ip},
             timeout=5,
         )
-        print(f"Remediation triggered: HTTP {r.status_code}")
+        print(f"Remediation triggered: HTTP {r.status_code}, source_ip={source_ip}")
     except Exception as e:
         print(f"Failed to reach remediation service: {e}")
 
